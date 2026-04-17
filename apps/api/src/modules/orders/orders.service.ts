@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { OrderStatus } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { CreateOrderDto } from "./dto/create-order.dto";
@@ -22,7 +21,9 @@ export class OrdersService {
       }
     });
 
-    const menuItemMap = new Map(menuItems.map((item) => [item.id, item]));
+    const menuItemMap = new Map<string, { name: string; price: number }>(
+      menuItems.map((item) => [item.id, { name: item.name, price: item.price }])
+    );
     const normalizedItems = payload.items.map((item) => {
       const menu = menuItemMap.get(item.menuItemId);
       return {
@@ -39,7 +40,7 @@ export class OrdersService {
       data: {
         restaurantId: payload.restaurantId,
         tableId: payload.tableId,
-        status: OrderStatus.PENDING,
+        status: "PENDING",
         source: payload.source ?? "qr",
         totalAmount,
         items: {
