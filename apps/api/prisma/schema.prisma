@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum IntegrationProvider {
+  JOWI
+  RKEEPER
+  IIKO
+}
+
+enum OrderStatus {
+  PENDING
+  SENT
+  PREPARING
+  COMPLETED
+  RETRYING
+  MANUAL_REQUIRED
+  FAILED
+}
+
+model Restaurant {
+  id           String                  @id @default(cuid())
+  name         String
+  slug         String                  @unique
+  posType      String
+  status       String                  @default("active")
+  timezone     String                  @default("Asia/Tashkent")
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  integrations RestaurantIntegration[]
+  tables       Table[]
+  menuItems    MenuItem[]
+  categories   MenuCategory[]
+  orders       Order[]
+  qrSessions   QrSession[]
+}
+
+model RestaurantIntegration {
+  id                String              @id @default(cuid())
+  restaurantId      String
+  provider          IntegrationProvider
+  apiUrl            String
+  apiKeyEncrypted   String
+  apiSecretEncrypted String
+  isActive          Boolean             @default(true)
+  lastHealthCheckAt DateTime?
+  lastSyncAt        DateTime?
+  restaurant        Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+}
+
+model Table {
+  id           String      @id @default(cuid())
+  restaurantId String
+  number       String
+  zone         String?
+  qrCodeUrl    String?
+  isActive     Boolean     @default(true)
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  qrSessions   QrSession[]
+
+  @@unique([restaurantId, number])
+  @@index([restaurantId])
+}
+
+model MenuCategory {
+  id           String      @id @default(cuid())
+  restaurantId String
+  externalId   String?
+  name         String
+  sortOrder    Int         @default(0)
+  isActive     Boolean     @default(true)
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItems    MenuItem[]
+
+  @@index([restaurantId])
+}
+
+model MenuItem {
+  id           String      @id @default(cuid())
+  restaurantId String
+  categoryId   String?
+  externalId   String?
+  name         String
+  description  String?
+  price        Float
+  imageUrl     String?
+  isAvailable  Boolean     @default(true)
+  metadataJson String?
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category     MenuCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  orderItems   OrderItem[]
+
+  @@index([restaurantId])
+  @@index([categoryId])
+  @@unique([restaurantId, externalId])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  restaurantId    String
+  tableId         String?
+  sessionId       String?
+  status          OrderStatus @default(PENDING)
+  source          String      @default("qr")
+  totalAmount     Float       @default(0)
+  externalOrderId String?
+  failureReason   String?
+  idempotencyKey  String?     @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table           Table?      @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  items           OrderItem[]
+  events          OrderEvent[]
+
+  @@index([restaurantId, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id            String   @id @default(cuid())
+  orderId       String
+  menuItemId    String?
+  externalItemId String?
+  name          String
+  price         Float
+  quantity      Int
+  modifiersJson String?
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem      MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+model OrderEvent {
+  id          String   @id @default(cuid())
+  orderId     String
+  type        String
+  payloadJson String?
+  createdAt   DateTime @default(now())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model QrSession {
+  id                String    @id @default(cuid())
+  restaurantId      String
+  tableId           String
+  token             String    @unique
+  expiresAt         DateTime
+  deviceFingerprint String?
+  geoHash           String?
+  status            String    @default("active")
+  restaurant        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table             Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([tableId])
+}
